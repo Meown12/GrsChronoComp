@@ -40,6 +40,10 @@ def chronPercentileDay(dayData, percentileList, precision):
     Calculates percentiles for a given Day.
     dayData should be given as a two dimensional array with the time as a datetime object and the accelerometer average for that period.
     It also takes a list of percentiles for which the times should be given.
+    :param dayData two dimensional array of datetime objects in column 0 and values in column 1
+    :param percentileList list of percentages to record the times for
+    :param precision how close a value needs to match a given percentage
+    :return list of datetime objects that correlate in order to the given percentileList
     """
     result = ["NA" for i in range(len(percentileList))]
     daySum = sum(dayData[1])
@@ -52,7 +56,11 @@ def chronPercentileDay(dayData, percentileList, precision):
     for n in range(len(dayData[1])):
         # for every datapoint check whether a percentile is reached, and save the time
         currentSum += dayData[1][n]
-        percent = currentSum / daySum
+        try:
+            percent = currentSum / daySum
+        except ZeroDivisionError:
+            print("No Data present")
+            continue
         for j in range(len(percentileList)):
             # check for all percentages
             distance = abs(percent - percentileList[j])
@@ -67,6 +75,13 @@ def chronPercentileDay(dayData, percentileList, precision):
 
 
 def readData(fileName):
+    """
+    Reads a file object to convert it into usable data formats. During this the first and last day for each id are
+    truncated.
+    :param fileName: the file object that should be read
+    :return: a list with each row being two lists, where list 0 contains times and list 1 values whilst each row
+    represent a single day
+    """
     # there can be three types of files this script can operate with, original 5 second data, processed raw Data and feature data
     results = None
     if not fileName.endswith(ALLOWED_EXTENSIONS) :
@@ -98,6 +113,8 @@ def readData(fileName):
         elif header.startswith("acceleration"):
             # raw data
             results= readRawData(datFile)
+        else:
+            print("could not determine format")
     finally:
         datFile.close()
     return results
@@ -108,8 +125,10 @@ def readRawData(file):
     """
     To use to read raw data files into the chronPercentile Script
     :param file: file object from where to read the data
-    :return:
+    :return: a list with each row being two lists, where list 0 contains times and list 1 values whilst each row
+    represent a single day
     """
+    print("Found Raw Data in {}".format(file.name))
     results = [[],[]]
     result = [[],[]]
     file.seek(0)
@@ -117,41 +136,59 @@ def readRawData(file):
     offset = 0
     currentTime = None
     oldTime = None
+    startDay = True
     for line in file:
         oldTime = currentTime
         offset += 1
         currentTime = epochConv.getTimeStampDT(header, offset, 5)
         if  (oldTime != None) and (currentTime.day != oldTime.day):
-            results[0].append((os.path.basename(file.name)).split(".")[0])
-            results[1].append(copy.deepcopy(result))
+            if not startDay:
+                if len(result[1]) != 0 : # no values saved for the day... skip the day
+                    results[0].append((os.path.basename(file.name)).split(".")[0])
+                    results[1].append(copy.deepcopy(result))
+            startDay = False
             result[0].clear()
             result[1].clear()
-        result[0].append(currentTime)
-        result[1].append(float(line.split(",")[0]))
-    results[0].append((os.path.basename(file.name)).split(".")[0])
-    results[1].append(copy.deepcopy(result))
-    result[0].clear()
-    result[1].clear()
+        try:
+            result[1].append(float(line.split(",")[0]))
+            result[0].append(currentTime)
+        except ValueError:
+            pass # the line is incomplete and has to be skipped
+
+    # results[0].append((os.path.basename(file.name)).split(".")[0])
+    # results[1].append(copy.deepcopy(result))
+    # result[0].clear()
+    # result[1].clear()
     return results
 
 
 
 def readProcessedData(file):
+    """
 
+    :param file:
+    :return: a list with each row being two lists, where list 0 contains times and list 1 values whilst each row
+    represent a single day
+    """
+    print("Found processed Data in {}".format(file.name))
     results = [[],[]]
     result = [[],[]]
     next(file) # skip the header line, if not done so already
     i = 0 # day index
     oldTime = None
     currentTime = None
+    startDay = True
     for line in file:
         lineParts =line.strip().split("\t")
         if len(lineParts) == 3 and lineParts[1] != -1:
             oldTime = currentTime
             currentTime = datetime.datetime.strptime(lineParts[0], "%Y-%m-%dT%H:%M:%S")
             if oldTime != None and currentTime.day != oldTime.day:
-                results[0].append((os.path.basename(file.name)).split(".")[0])
-                results[1].append(copy.deepcopy(result))
+                if not startDay:
+                    if len(result[1]) != 0:  # no values saved for the day... skip the day
+                        results[0].append((os.path.basename(file.name)).split(".")[0])
+                        results[1].append(copy.deepcopy(result))
+                startDay = False
                 result[0].clear()
                 result[1].clear()
             result[0].append(currentTime)
@@ -159,16 +196,24 @@ def readProcessedData(file):
         else:
             # line incomplete, discard
             pass
-    results[0].append((os.path.basename(file.name)).split(".")[0])
-    results[1].append(copy.deepcopy(result))
-    result[0].clear()
-    result[1].clear()
+    # results[0].append((os.path.basename(file.name)).split(".")[0])
+    # results[1].append(copy.deepcopy(result))
+    # result[0].clear()
+    # result[1].clear()
     return results
 
 def readAccelFeatureData(file):
+    """
+
+    :param file:
+    :return: a list with each row being two lists, where list 0 contains times and list 1 values whilst each row
+    represent a single day
+    """
     # only the mean is interesting, so load that
     # 8 + 5*n columns until n = 23
     # date column is the second from the left with YYYY-mm-dd
+    print("Found Feature Data in {}".format(file.name))
+    users = []
     results = [[],[]]
     result = [[],[]]
     i = 0
@@ -177,6 +222,12 @@ def readAccelFeatureData(file):
         # each line is a new day
         i += 1
         line = line.strip().split("\t")
+        if not line[0] in users:
+            if len(users) != 0: #new person in document, meaning the previous results entry is a last day
+                del results[0][-1]
+                del results[1][-1]
+            users.append(line[0])
+            continue
         date = line[1].split("-")
         for n in range(0,24):
             if (line[8 + 5 * n] != "N/A"):
@@ -186,12 +237,18 @@ def readAccelFeatureData(file):
         results[1].append(copy.deepcopy(result))
         result[0].clear()
         result[1].clear()
+    del results[0][-1]
+    del results[1][-1]
     return results
 
 
 
 
 def main():
+    """
+
+    :return: none
+    """
     # takes accelerometer file (both formats) or directory,
     parser = argparse.ArgumentParser(description="Script to determine  the times, where a certain percentile of "
                                                  "daily activity is reached")
@@ -209,43 +266,53 @@ def main():
             percentages.append(round(abs(float(value))/100, 8))
         else:
             percentages.append(round(abs(float(value)), 8))
-
     if os.path.isfile(os.path.abspath(args.inlis)) and args.inlis.endswith(ALLOWED_EXTENSIONS):
         # only one file to look at
         fileList.append(os.path.abspath(args.inlis))
     else: # a directory or file list
         fileList = epochConv.getFiles(args.inlis)
+    try:
+        os.remove(os.path.abspath(args.out))
+    except:
+        pass
 
-    results = [[],[],[]]
-    for fileName in fileList:
-        data = readData(fileName)
-
-        for i in range(len(data[0])):
-            percentileResults = chronPercentileDay(data[1][i], percentages, precision) # give it one day of data
-            results[0].append(data[0][i]) # add id
-            results[1].append(data[1][i][0][0].strftime("%Y-%m-%d")) # append date from the first element in the data set
-            results[2].append(percentileResults)
-
-    # output
-    # write header
+    # write header for output
     outText = ""
     outText += "ID\tDate"
     for percentage in percentages:
         outText += "\t{}".format(percentage)
     outText += "\n"
-    # write data
-    for i in range(len(results[0])):
-        # for every day dataset
-        outText += ("{}\t{}".format(results[0][i], results[1][i]))
-        for percentage in results[2][i]:
-            outText += ("\t{}".format((datetime.datetime.strftime(percentage, "%H:%M:%S"))if percentage != "NA" else "lacking Data"))
-        outText += ("\n")
-
-    if args.out != None: # we need to save
+    if args.out != None:  # we need to save
         with open(os.path.abspath(args.out), "w") as outFile:
             outFile.write(outText)
     else:
         print(outText)
+
+    #calculate results
+    for fileName in fileList:
+        results = [[], [], []]
+        data = readData(fileName)
+        for i in range(len(data[1])):
+            percentileResults = chronPercentileDay(data[1][i], percentages, precision) # give it one day of data
+            results[0].append(data[0][i]) # add id
+            results[1].append(data[1][i][0][0].strftime("%Y-%m-%d")) # append date from the first element in the data set
+            results[2].append(percentileResults)
+
+        # output
+        # write data
+        resultString = ""
+        for i in range(len(results[0])):
+            # for every day dataset
+            resultString += ("{}\t{}".format(results[0][i], results[1][i]))
+            for percentage in results[2][i]:
+                resultString += ("\t{}".format((datetime.datetime.strftime(percentage, "%H:%M:%S"))if percentage != "NA" else "NA"))
+            resultString += ("\n")
+
+        if args.out != None: # we need to save
+            with open(os.path.abspath(args.out), "a") as outFile:
+                outFile.write(resultString)
+        else:
+            print(resultString)
 
 
 
