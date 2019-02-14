@@ -1,13 +1,13 @@
 import argparse
 import os
-import epochConv
+#import epochConv
 import datetime
 
 ALLOWED_EXTENSIONS = (".tsv")
 HEADER_COLUMNS = 2
 DAYSECONDS = (24* 3600)
 PRECISION = 8
-BUFFERLENGTH = 1000
+BUFFERLENGTH = 10000
 
 def convertLine(line, precision = PRECISION):
     lineParts = line.strip().split("\t")
@@ -21,11 +21,16 @@ def convertLine(line, precision = PRECISION):
             else:
                 outLine += "\t" + fraction
         else: # normal time
-            fractioDT = datetime.datetime.strptime(fraction, "%H:%M:%S")
-            fractionTime = fractioDT.time()
-            seconds = fractionTime.hour*3600+ fractionTime.minute*60 + fractionTime.second
-            percent = seconds /DAYSECONDS
+
+            try:
+                fractioDT = datetime.datetime.strptime(fraction, "%H:%M:%S")
+                fractionTime = fractioDT.time()
+                seconds = fractionTime.hour*3600+ fractionTime.minute*60 + fractionTime.second
+                percent = seconds /DAYSECONDS
+            except ValueError:
+                return ""
             outLine += "\t{}".format(round(percent,precision))
+
         fractionCounter += 1
     outLine += "\n"
     return outLine
@@ -43,11 +48,13 @@ def convertPercentages(infile, outfile = "", precision = PRECISION):
                 outLine += convertLine(line, precision)
             else:
                 outLine = line
+                start = False
             if outfile != "":
                 if lineCount > BUFFERLENGTH:
                     with open(outfile, "a") as outFile :
                         outFile.write(outLine)
                     lineCount = 0
+                    outLine = ""
             else:
                 print(outLine)
     if outfile != "": # final leftover save
@@ -72,7 +79,8 @@ def main():
         # only one file to look at
         fileList.append(os.path.abspath(args.inlis))
     else: # a directory or file list
-        fileList = epochConv.getFiles(args.inlis)
+       #  fileList = epochConv.getFiles(args.inlis)
+        print("cant do on cook due to pytz missing, reenable once available")
     try:
         os.remove(os.path.abspath(args.out))
     except:
