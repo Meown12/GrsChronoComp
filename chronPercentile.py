@@ -253,7 +253,7 @@ def main():
     parser = argparse.ArgumentParser(description="Script to determine  the times, where a certain percentile of "
                                                  "daily activity is reached")
     parser.add_argument("inlis", metavar="IL",  help="Location of a file or a directory to be read")
-    parser.add_argument("pargs", nargs="+", type=float, help="Percentiles to be analyzed" )
+    parser.add_argument("percentiles", nargs="+", type=float, help="Percentiles to be analyzed" )
     parser.add_argument("-o", nargs="?", type=str, dest="out", const="", help="output location")
     parser.add_argument("-p", nargs="?", type=float, dest="precision", const="0.05", help="precision for time approximation")
     args = parser.parse_args()
@@ -261,7 +261,7 @@ def main():
     precision = args.precision if args.precision != None else 0.05
     # check percentage level input
     percentages = []
-    for value in args.pargs: # values need to be between 0 and 1, so we may need to convert them.
+    for value in args.percentiles: # values need to be between 0 and 1, so we may need to convert them.
         if float(value) > 1: # assume XX.XX... [%] writing, divide by 100
             percentages.append(round(abs(float(value))/100, 8))
         else:
