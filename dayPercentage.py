@@ -9,7 +9,14 @@ DAYSECONDS = (24* 3600)
 PRECISION = 8
 BUFFERLENGTH = 10000
 
+
 def convertLine(line, precision = PRECISION):
+    """
+    Takes a single line of the input and converts given time values outside the header column into a percentage of the day.
+    :param line: text line with the amount of heade columns specified in HEADER_COLUMNS and time in the format HH:MM:SS, seperated by tab
+    :param precision: number of decimal place to round to, when converting
+    :return: line, as before but with the times replaced with the corresponding percentage of the day
+    """
     lineParts = line.strip().split("\t")
     outLine = ""
     fractionCounter = 0
@@ -26,16 +33,22 @@ def convertLine(line, precision = PRECISION):
                 fractioDT = datetime.datetime.strptime(fraction, "%H:%M:%S")
                 fractionTime = fractioDT.time()
                 seconds = fractionTime.hour*3600+ fractionTime.minute*60 + fractionTime.second
-                percent = seconds /DAYSECONDS
+                percent = seconds /DAYSECONDS                                                   # to get seconds change here to : seconds + "/" + DAYSECONDS
             except ValueError:
                 return ""
-            outLine += "\t{}".format(round(percent,precision))
+            outLine += "\t{}".format(round(percent,precision))                                  # to get seconds change here to : outLine += "\t" + percent
 
         fractionCounter += 1
     outLine += "\n"
     return outLine
 
 def convertPercentages(infile, outfile = "", precision = PRECISION):
+    """
+    Function that converts a whole chronPercentile file from time into
+    :param infile: file path to a file created with chron percentile
+    :param outfile: path the changed file should be saved to
+    :param precision: precision of the float conversion of the percentage calculation
+    """
     with open(infile, "r") as inFile:
         lineCount = 0
         outLine = ""
@@ -63,7 +76,7 @@ def convertPercentages(infile, outfile = "", precision = PRECISION):
 
 def main():
     """
-
+    The main function for the time to percentage conversion script.
     :return: none
     """
     # takes accelerometer file (both formats) or directory,

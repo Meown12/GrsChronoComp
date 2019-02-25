@@ -165,7 +165,7 @@ def readRawData(file):
 
 def readProcessedData(file):
     """
-
+    To use to read processed data files into the chronPercentile Script, i.e. files that have been created using the epochConv script
     :param file:
     :return: a list with each row being two lists, where list 0 contains times and list 1 values whilst each row
     represent a single day
@@ -204,7 +204,7 @@ def readProcessedData(file):
 
 def readAccelFeatureData(file):
     """
-
+    To use to read dayactivity data files, i.e. files generated with the accelerometer into the chronPercentile Script
     :param file:
     :return: a list with each row being two lists, where list 0 contains times and list 1 values whilst each row
     represent a single day
@@ -246,7 +246,7 @@ def readAccelFeatureData(file):
 
 def main():
     """
-
+    Overall management of the chronPercentile Conversion
     :return: none
     """
     # takes accelerometer file (both formats) or directory,
