@@ -35,7 +35,8 @@ ACCELFEAT_HEADER = "ID\tDate\tDay Of The Week\tMean (mg)\tStandard Deviation (mg
                  "Mean HR23\tStandard Deviation HR23\tMedian HR23\tQ1 HR23\tQ3 HR23\t" \
                  "Daylight Savings\n"
 
-def chronPercentileDay(dayData, percentileList, precision):
+
+def chronPercentileDay(dayData, percentileList, percentage, precision):
     """
     Calculates percentiles for a given Day.
     dayData should be given as a two dimensional array with the time as a datetime object and the accelerometer average for that period.
@@ -67,14 +68,117 @@ def chronPercentileDay(dayData, percentileList, precision):
             if distance < precision and distance < offsets[2][j]:
                 offsets[3][j] = dayData[0][n]   # time
                 offsets[2][j] = distance        # distance
-                offsets[1][j] = n               # index
+                offsets[1][j] = (dayData[0][n].replace(tzinfo=None) - datetime.datetime(dayData[0][n].year, dayData[0][n].month, dayData[0][n].day)).total_seconds() / 86400                # percentage of the full day
     for k in range(len(offsets[0])):
         if  offsets[3][k] != None:
-            result[k] = offsets[3][k]
+            if percentage:
+                result[k] = offsets[1][k]
+            else:
+                result[k] = offsets[3][k]
     return result
 
 
-def readData(fileName):
+def getTotalActivity(idTime, start, end ):
+    mgSum = 0
+    for i in range(len(idTime[0])):
+        if idTime[0][i].replace(tzinfo=None) >= start.replace(tzinfo=None) and idTime[0][i].replace(tzinfo=None) <=end.replace(tzinfo=None):
+            mgSum += idTime[1][i]
+    return mgSum
+
+
+def wakeChronoPerc(Data, id, percentileList, wakeData, percent,precision):
+    wakeTime = getWakePeriods(id, wakeData) # [[starttime, endtime]]
+    dayResults = []  # list of (date (list of times))
+    if wakeTime != None:
+        idTime = getActivePeriods(id, Data)
+
+        offsets = [percentileList,
+                   [0 for i in range(len(percentileList))],
+                   [1 for i in range(len(percentileList))],
+                   [None for i in range(len(percentileList))]]
+        wakeDayCounter = 0
+        dayActivity = getTotalActivity(idTime, wakeTime[wakeDayCounter][0], wakeTime[wakeDayCounter][1])
+        currentSum = 0
+        firstRun = True
+        # we have all the data for being awake and their normal
+        print("Yiha")
+        for i in range(len(idTime[0])):
+            if idTime[0][i].replace(tzinfo=None) >= wakeTime[wakeDayCounter][0].replace(tzinfo=None) and \
+                    idTime[0][i].replace(tzinfo=None) <= wakeTime[wakeDayCounter][1].replace(tzinfo=None):
+                # the time is measured during wake hours
+                # for every datapoint check whether a percentile is reached, and save the time
+                currentSum += idTime[1][i]
+                try:
+                    percent = currentSum / dayActivity
+                except ZeroDivisionError:
+                    print("No Data present")
+                    continue
+                for j in range(len(percentileList)):
+                    # check for all percentages
+                    distance = abs(percent - percentileList[j])
+                    if distance < precision and distance < offsets[2][j]:
+                        offsets[3][j] = idTime[0][i]  # time
+                        offsets[2][j] = distance  # distance
+                        offsets[1][j] = (idTime[0][i].replace(tzinfo=None) - wakeTime[wakeDayCounter][0].replace(tzinfo=None)).total_seconds()/\
+                                        (wakeTime[wakeDayCounter][1].replace(tzinfo=None) \
+                                         - wakeTime[wakeDayCounter][0].replace(tzinfo=None)).total_seconds()  # time percentage
+
+            elif idTime[0][i].replace(tzinfo=None) > wakeTime[wakeDayCounter][1].replace(tzinfo= None):
+                if not firstRun :
+                    if percent:
+                        if offsets[1][0] != None:
+                            dayResults.append([offsets[3][0].strftime("%Y-%m-%d"), offsets[1]])
+                    else:
+                        if offsets[3][0] != None:
+                            dayResults.append([offsets[3][0].strftime("%Y-%m-%d"), offsets[3]])
+                offsets = [percentileList,
+                           [0 for i in range(len(percentileList))],
+                           [1 for i in range(len(percentileList))],
+                           [None for i in range(len(percentileList))]]
+                try:
+                    wakeDayCounter += 1
+                    dayActivity = getTotalActivity(idTime, wakeTime[wakeDayCounter][0], wakeTime[wakeDayCounter][1])
+                except IndexError:
+                    break
+                currentSum = 0
+                firstRun = False
+        # store in final list
+    return dayResults
+
+
+
+
+
+    #find wake data that may influence the dayData
+
+def getWakePeriods(id, wakeData):
+    periods = []
+    try:
+        id = id.split("_")[0]
+        ind = wakeData[0].index(int(id))
+        for i in range(len(wakeData[1][ind][0])):
+            periods.append([wakeData[1][ind][0][i], wakeData[1][ind][1][i]])
+        periods.sort(key=lambda x:x[0])
+    except ValueError:
+        periods = None
+        print("ID " +  id.split("_")[0] + " could not be found in given sleep data set.")
+    print(periods)
+    return periods
+
+def getActivePeriods(id, data):
+    periods = [[],[]]
+    for i in range(len(data[0])):
+        if int(data[0][i].split("_")[0]) == int(id.split("_")[0]):
+            periods[0].extend(data[1][i][0])
+            periods[1].extend(data[1][i][1])
+    # TODO find better solution for guranteeing of order of days
+    return periods
+
+
+
+
+
+def readData(fileName, lastDay=False):
     """
     Reads a file object to convert it into usable data formats. During this the first and last day for each id are
     truncated.
@@ -112,16 +216,14 @@ def readData(fileName):
             results= readProcessedData(datFile)
         elif header.startswith("acceleration"):
             # raw data
-            results= readRawData(datFile)
+            results= readRawData(datFile, lastDay)
         else:
             print("could not determine format")
     finally:
         datFile.close()
     return results
 
-
-
-def readRawData(file):
+def readRawData(file, lastDay= False):
     """
     To use to read raw data files into the chronPercentile Script
     :param file: file object from where to read the data
@@ -154,16 +256,14 @@ def readRawData(file):
             result[0].append(currentTime)
         except ValueError:
             pass # the line is incomplete and has to be skipped
-
-    # results[0].append((os.path.basename(file.name)).split(".")[0])
-    # results[1].append(copy.deepcopy(result))
-    # result[0].clear()
-    # result[1].clear()
+    if lastDay:
+        results[0].append((os.path.basename(file.name)).split(".")[0])
+        results[1].append(copy.deepcopy(result))
+        result[0].clear()
+        result[1].clear()
     return results
 
-
-
-def readProcessedData(file):
+def readProcessedData(file, lastDay=False):
     """
     To use to read processed data files into the chronPercentile Script, i.e. files that have been created using the epochConv script
     :param file:
@@ -196,10 +296,11 @@ def readProcessedData(file):
         else:
             # line incomplete, discard
             pass
-    # results[0].append((os.path.basename(file.name)).split(".")[0])
-    # results[1].append(copy.deepcopy(result))
-    # result[0].clear()
-    # result[1].clear()
+    if lastDay:
+        results[0].append((os.path.basename(file.name)).split(".")[0])
+        results[1].append(copy.deepcopy(result))
+        result[0].clear()
+        result[1].clear()
     return results
 
 def readAccelFeatureData(file):
@@ -241,8 +342,29 @@ def readAccelFeatureData(file):
     del results[1][-1]
     return results
 
-
-
+def loadWakeHourFile(fileName):
+    wakehours = [[],[]] # id [startDatetime endDatetime]
+    hours = [[],[]]
+    lastID = ""
+    with open(fileName, "r") as wakeFile:
+        header = wakeFile.readline()
+        if header.startswith("Filename\tDate\tWake_Time\tSleep_Date\tSleep_Time\t"):
+            for line in wakeFile:
+                lineparts = line.strip().split("\t")
+                newID = lineparts[0].strip().split("_")[0]
+                if (newID != lastID )and( lastID != ""):
+                    wakehours[0].append(int(lastID))
+                    wakehours[1].append(copy.deepcopy(hours))
+                    hours[0].clear()
+                    hours[1].clear()
+                wakeTimeStr = lineparts[1] + " "+ lineparts [2]
+                sleepTimeStr = lineparts[3] + " " + lineparts[4]
+                wakeTime = datetime.datetime.strptime(wakeTimeStr, "%d/%m/%Y %H:%M:%S")
+                sleepTime = datetime.datetime.strptime(sleepTimeStr, "%d/%m/%Y %H:%M:%S")
+                hours[0].append(wakeTime)
+                hours[1].append(sleepTime)
+                lastID = newID
+    return wakehours
 
 def main():
     """
@@ -253,9 +375,11 @@ def main():
     parser = argparse.ArgumentParser(description="Script to determine  the times, where a certain percentile of "
                                                  "daily activity is reached")
     parser.add_argument("inlis", metavar="IL",  help="Location of a file or a directory to be read")
+    parser.add_argument("-w", nargs="?", type= str, const="", dest= "wakeFile", help= "Location of a file containing the Wakeup and Sleep times, in the standard used by Dr. Andrew Wood")
     parser.add_argument("percentiles", nargs="+", type=float, help="Percentiles to be analyzed" )
     parser.add_argument("-o", nargs="?", type=str, dest="out", const="", help="output location")
     parser.add_argument("-p", nargs="?", type=float, dest="precision", const="0.05", help="precision for time approximation")
+    parser.add_argument("-t", action='store_true', dest="asTime", help="Flag to format the output as HH:MM:SS instead of a percentage of the awaken day")
     args = parser.parse_args()
     fileList = []
     precision = args.precision if args.precision != None else 0.05
@@ -289,14 +413,32 @@ def main():
         print(outText)
 
     #calculate results
+    wakeHourCalc = False
+    ids = []
+    if args.wakeFile != "" and args.wakeFile != None:
+        wakeHourCalc = True
+    if wakeHourCalc:
+        wakeInfo = loadWakeHourFile(args.wakeFile)
     for fileName in fileList:
         results = [[], [], []]
-        data = readData(fileName)
+        data = readData(fileName, wakeHourCalc)
         for i in range(len(data[1])):
-            percentileResults = chronPercentileDay(data[1][i], percentages, precision) # give it one day of data
-            results[0].append(data[0][i]) # add id
-            results[1].append(data[1][i][0][0].strftime("%Y-%m-%d")) # append date from the first element in the data set
-            results[2].append(percentileResults)
+            if not wakeHourCalc:
+
+                percentileResults = chronPercentileDay(data[1][i], percentages, not(args.asTime),precision) # give it one day of data
+                results[0].append(data[0][i]) # add id
+                results[1].append(data[1][i][0][0].strftime("%Y-%m-%d")) # append date from the first element in the data set
+                results[2].append(percentileResults)
+            else:
+                if data[0][i] in ids:
+                    print("id duplicate" + data[0][i])
+                    continue
+                percentileResults = wakeChronoPerc(data, data[0][i], percentages, wakeInfo, not(args.asTime), precision)
+                for i in range(len(percentileResults)):
+                    results[2].append(percentileResults[i][1])
+                    results[1].append(percentileResults[i][0])
+                    results[0].append(data[0][i])
+                ids.append(data[0][i])
 
         # output
         # write data
@@ -304,8 +446,15 @@ def main():
         for i in range(len(results[0])):
             # for every day dataset
             resultString += ("{}\t{}".format(results[0][i], results[1][i]))
+
             for percentage in results[2][i]:
-                resultString += ("\t{}".format((datetime.datetime.strftime(percentage, "%H:%M:%S"))if percentage != "NA" else "NA"))
+                try:
+                    if args.asTime:
+                        resultString += ("\t{}".format((datetime.datetime.strftime(percentage, "%H:%M:%S"))if percentage != "NA"  and isinstance(percentage, datetime.datetime) else "NA"))
+                    else:
+                        resultString += ("\t{}".format(percentage))
+                except TypeError:
+                    resultString += "NA"
             resultString += ("\n")
 
         if args.out != None: # we need to save
