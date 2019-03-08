@@ -8,3 +8,8 @@ The script takes four parameters ```[-w W][-t][-o [out]][-p [precision]] IL perc
 The output format is tab seperated with the complimentary columns ID and Date, where ID is either derived from the document name or file contents. Date is the date on which the measurement was taken. These two columns are then followed by an arbitrary number of percentages or times in a HH:MM:SS format(depending on the -t flag), in the order they were specified in the script call.
 <br>
 A new feature, the -w argument allows to add in a file contaning the awaken hours of a person. If it is added, the calculated times and percentages will only refer  to the "awake" part of the day. Meaning, only activity during those hours is considered. Times are still based on the 24 hour clock of the standard day and will wrap around for a new day, in case the go-to-sleep time is past midnight. The percentages are based on the relation of time to waken time (-> (currentTime-StartTime)/(EndTime-StartTime)).
+The file in which the wake data is stored must follow the standard outlined by Dr. Andrew Woods file
+
+## dayPercentage 
+This is a small script to change data generate with chronPercentile from a HH:MM:SS format into a daypercentage or seconds since day start. it does not offer the same results as chronPercentile does, when used with a wake file, as it does not support it. 
+USAGE: ```inlis [-o O] [-p [P]``` where inlis is the file or the direcotry of chronPercentile Data -o is the outputfile and -p is the number of digits for the conversion into a percentage, which by default is 5.
