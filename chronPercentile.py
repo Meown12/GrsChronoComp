@@ -70,7 +70,7 @@ def chronPercentileDay(dayData, percentileList, percentage, precision):
                 offsets[2][j] = distance        # distance
                 offsets[1][j] = (dayData[0][n].replace(tzinfo=None) - datetime.datetime(dayData[0][n].year, dayData[0][n].month, dayData[0][n].day)).total_seconds() / 86400                # percentage of the full day
     for k in range(len(offsets[0])):
-        if  offsets[3][k] != None:
+        if  offsets[3][k] != None and offsets[1][k] != None:
             if percentage:
                 result[k] = offsets[1][k]
             else:
@@ -126,7 +126,7 @@ def wakeChronoPerc(Data, id, percentileList, wakeData, percent,precision):
             elif idTime[0][i].replace(tzinfo=None) > wakeTime[wakeDayCounter][1].replace(tzinfo= None):
                 if not firstRun :
                     if percent:
-                        if offsets[1][0] != None:
+                        if offsets[3][0] != None and offsets[1][0] != None:
                             dayResults.append([offsets[3][0].strftime("%Y-%m-%d"), offsets[1]])
                     else:
                         if offsets[3][0] != None:
